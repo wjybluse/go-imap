@@ -19,6 +19,8 @@ type Command struct {
 	Name string
 	// The command arguments.
 	Arguments []interface{}
+
+	TagPrefix string //use tag prefix
 }
 
 // Implements the Commander interface.

@@ -80,6 +80,7 @@ type SearchCriteria struct {
 
 	Not []*SearchCriteria    // Each criteria doesn't match
 	Or  [][2]*SearchCriteria // Each criteria pair has at least one match of two
+	All bool
 }
 
 // NewSearchCriteria creates a new search criteria.
@@ -360,6 +361,9 @@ func (c *SearchCriteria) Format() []interface{} {
 
 	for _, or := range c.Or {
 		fields = append(fields, "OR", or[0].Format(), or[1].Format())
+	}
+	if c.All {
+		fields = append(fields, "ALL")
 	}
 
 	return fields

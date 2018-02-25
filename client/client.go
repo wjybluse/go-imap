@@ -13,6 +13,7 @@ import (
 
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/responses"
+	"sync/atomic"
 )
 
 // errClosed is used when a connection is closed while waiting for a command
@@ -88,11 +89,17 @@ type Client struct {
 	// via the log package's standard logger. The logger must be safe to use
 	// simultaneously from multiple goroutines.
 	ErrorLog imap.Logger
-
+	//force prefix
+	ForcePrefix bool
 	// Timeout specifies a maximum amount of time to wait on a command.
 	//
 	// A Timeout of zero means no timeout. This is the default.
 	Timeout time.Duration
+
+	//cache all command
+	cmdCache map[string]string
+	//add increment number
+	incrNum int32
 }
 
 func (c *Client) registerHandler(h responses.Handler) {
@@ -177,7 +184,27 @@ type handleResult struct {
 
 func (c *Client) execute(cmdr imap.Commander, h responses.Handler) (*imap.StatusResp, error) {
 	cmd := cmdr.Command()
-	cmd.Tag = generateTag()
+	//if tag or tag prefix not set
+	if c.ForcePrefix {
+		//fix 163 bug
+		if cmd.Name == "CAPABILITY" {
+			cmd.Tag = "F100"
+		} else {
+			cmd.Tag = fmt.Sprintf("%s%d", "F", c.incrNum)
+			atomic.AddInt32(&c.incrNum, 1)
+		}
+	} else {
+		//can set
+		if (cmd.Tag == "" && cmd.TagPrefix == "") {
+			cmd.Tag = generateTag()
+		} else {
+			if (cmd.Tag == "") {
+				//increament
+				cmd.Tag = fmt.Sprintf("%s%d", cmd.TagPrefix, c.incrNum)
+				atomic.AddInt32(&c.incrNum, 1)
+			}
+		}
+	}
 
 	if c.Timeout > 0 {
 		err := c.conn.SetDeadline(time.Now().Add(c.Timeout))
@@ -494,7 +521,7 @@ func (c *Client) SetDebug(w io.Writer) {
 }
 
 // New creates a new client from an existing connection.
-func New(conn net.Conn) (*Client, error) {
+func New(conn net.Conn, forcePrefix bool) (*Client, error) {
 	continues := make(chan bool)
 	w := imap.NewClientWriter(nil, continues)
 	r := imap.NewReader(nil)
@@ -506,6 +533,9 @@ func New(conn net.Conn) (*Client, error) {
 		state:     imap.ConnectingState,
 		ErrorLog:  log.New(os.Stderr, "imap/client: ", log.LstdFlags),
 	}
+	if forcePrefix {
+		c.ForcePrefix = true
+	}
 
 	c.handleContinuationReqs(continues)
 	c.handleUnilateral()
@@ -514,13 +544,13 @@ func New(conn net.Conn) (*Client, error) {
 }
 
 // Dial connects to an IMAP server using an unencrypted connection.
-func Dial(addr string) (c *Client, err error) {
+func Dial(addr string, forcePrefix bool) (c *Client, err error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return
 	}
 
-	c, err = New(conn)
+	c, err = New(conn, forcePrefix)
 	return
 }
 
@@ -528,7 +558,7 @@ func Dial(addr string) (c *Client, err error) {
 // using dialer.Dial.
 //
 // Among other uses, this allows to apply a dial timeout.
-func DialWithDialer(dialer *net.Dialer, address string) (c *Client, err error) {
+func DialWithDialer(dialer *net.Dialer, address string, forcePrefix bool) (c *Client, err error) {
 	conn, err := dialer.Dial("tcp", address)
 	if err != nil {
 		return nil, err
@@ -545,18 +575,18 @@ func DialWithDialer(dialer *net.Dialer, address string) (c *Client, err error) {
 		}
 	}
 
-	c, err = New(conn)
+	c, err = New(conn, forcePrefix)
 	return
 }
 
 // DialTLS connects to an IMAP server using an encrypted connection.
-func DialTLS(addr string, tlsConfig *tls.Config) (c *Client, err error) {
+func DialTLS(addr string, tlsConfig *tls.Config, forcePrefix bool) (c *Client, err error) {
 	conn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
 		return
 	}
 
-	c, err = New(conn)
+	c, err = New(conn, forcePrefix)
 	c.isTLS = true
 	return
 }
@@ -566,7 +596,7 @@ func DialTLS(addr string, tlsConfig *tls.Config) (c *Client, err error) {
 //
 // Among other uses, this allows to apply a dial timeout.
 func DialWithDialerTLS(dialer *net.Dialer, addr string,
-	tlsConfig *tls.Config) (c *Client, err error) {
+	tlsConfig *tls.Config, forcePrefix bool) (c *Client, err error) {
 	conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
 	if err != nil {
 		return
@@ -583,7 +613,7 @@ func DialWithDialerTLS(dialer *net.Dialer, addr string,
 		}
 	}
 
-	c, err = New(conn)
+	c, err = New(conn, forcePrefix)
 	c.isTLS = true
 	return
 }
