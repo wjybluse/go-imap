@@ -11,9 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap/responses"
 	"sync/atomic"
+
+	imap "github.com/emersion/go-imap"
+	"github.com/emersion/go-imap/responses"
 )
 
 // errClosed is used when a connection is closed while waiting for a command
@@ -163,7 +164,7 @@ func (c *Client) read(greeted <-chan struct{}) error {
 		if err == io.EOF || c.State() == imap.LogoutState {
 			return nil
 		} else if err != nil {
-			c.ErrorLog.Println("error reading response:", err)
+			//c.ErrorLog.Println("error reading response:", err)
 			if imap.IsParseError(err) {
 				continue
 			} else {
@@ -195,10 +196,10 @@ func (c *Client) execute(cmdr imap.Commander, h responses.Handler) (*imap.Status
 		}
 	} else {
 		//can set
-		if (cmd.Tag == "" && cmd.TagPrefix == "") {
+		if cmd.Tag == "" && cmd.TagPrefix == "" {
 			cmd.Tag = generateTag()
 		} else {
-			if (cmd.Tag == "") {
+			if cmd.Tag == "" {
 				//increament
 				cmd.Tag = fmt.Sprintf("%s%d", cmd.TagPrefix, c.incrNum)
 				atomic.AddInt32(&c.incrNum, 1)
