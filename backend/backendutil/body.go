@@ -5,8 +5,8 @@ import (
 	"errors"
 	"io"
 
-	"github.com/emersion/go-imap"
-	"github.com/emersion/go-message"
+	imap "github.com/emersion/go-imap"
+	message "github.com/emersion/go-message"
 )
 
 var errNoSuchPart = errors.New("backendutil: no such message body part")
@@ -14,7 +14,7 @@ var errNoSuchPart = errors.New("backendutil: no such message body part")
 // FetchBodySection extracts a body section from a message.
 func FetchBodySection(e *message.Entity, section *imap.BodySectionName) (imap.Literal, error) {
 	// First, find the requested part using the provided path
-	for i := len(section.Path) - 1; i >= 0; i-- {
+	for i := 0; i < len(section.Path); i++ {
 		n := section.Path[i]
 
 		mr := e.MultipartReader()
@@ -48,8 +48,16 @@ func FetchBodySection(e *message.Entity, section *imap.BodySectionName) (imap.Li
 	defer mw.Close()
 
 	// If the header hasn't been requested, discard it
-	if section.Specifier == imap.TextSpecifier {
+	switch section.Specifier {
+	case imap.TextSpecifier:
+		// The header hasn't been requested. Discard it.
 		b.Reset()
+	case imap.EntireSpecifier:
+		if len(section.Path) > 0 {
+			// When selecting a specific part by index, IMAP servers
+			// return only the text, not the associated MIME header.
+			b.Reset()
+		}
 	}
 
 	// Write the body, if requested
